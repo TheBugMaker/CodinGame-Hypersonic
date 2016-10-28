@@ -7,6 +7,7 @@ namespace codingame_hypersonic
 {
     class Bomb
     {
+        
         public Position p;
         public int duration;
         public int range; 

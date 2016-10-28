@@ -1,0 +1,905 @@
+using System.Collections;
+using System.IO;
+using System.Text;
+using System.Linq;
+using System.Collections.Generic;
+using System;
+
+namespace codingame_hypersonic
+{
+    class Bomb
+    {
+        public Position p;
+        public int duration;
+        public int range; 
+        public bool active = false;
+
+        public Bomb(int duration)
+        {
+            this.duration = duration ; 
+        }
+
+        public Bomb(int x, int y, int duration, int range)
+        {
+            p = new Position(x, y);
+            this.duration = duration;
+            this.range = range;  
+        }
+ 
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Brain
+    {
+        public static Impact SearchAround(Me me)
+        {
+            var s = new Sight();
+            var im = new Impact(new Position(4, 5), -1);
+            for (int i = 1; i < 8; i++)
+            {
+
+                foreach (var test in s.Arround(me.p, i))
+                {
+                    var newIm = new Impact(test);
+                    if (newIm.hits > im.hits || im.hits == 0)
+                    {
+                        im = newIm;
+                    }
+                };
+            }
+            return im;
+        }
+
+        public static Path navigateDirs(Me me)
+        {
+            var w = new Walker(); 
+            var pp = new Path().AddPosition(me.p) ; 
+            return w.walk(pp, 6, 0);
+        }
+    }
+}
+
+
+namespace codingame_hypersonic
+{
+    class Commander
+    {
+        public static Impact im = new Impact(new Position(100,100) , 0) ; 
+
+        public static void setImpact (Impact newIm){
+                im = newIm ; 
+        }
+
+        public static String DoAction(Path path , Me me )
+        {
+            var action = "MOVE ";
+            Console.Error.WriteLine("Gonna Hit "+ path.maxHitIndex); 
+
+
+            if (path.road.Count() < 2)
+            {
+                return "MOVE " + me.p + " I got Nothing !!"; 
+            }
+            var im = path.road.First(); 
+            path.road.RemoveFirst();
+            var im2 = path.road.First();
+            var target = im2.p;
+            if (path.maxHitIndex == 0 || ( path.maxHitIndex > -1 && path.road.ElementAt(path.maxHitIndex - 1 ).p.Equals(me.p)) )
+            {
+                action = "BOMB ";
+                if (!Safety.isItSafeToBomb(im.p, im2.p, Me.BombRange, 5))
+                {  
+                    target = im.p;   
+                }
+            } 
+
+           
+            action = action  + target;
+ 
+            return action  ; 
+        }
+
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Enemy : Player
+    {
+        public Enemy()
+        {
+
+        }
+        public Enemy(int x , int y , int p1) : base(x,y,p1)
+        {
+
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Evil
+    {
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Grid
+    {
+        public static char [,]g ;
+        public static LinkedList<Bomb> boms = new LinkedList<Bomb>() ; 
+        public static void setGrid(int height , int width)
+        {
+            g = new char[width, height]; 
+        }
+
+        public static char getAt(int x, int y)
+        {
+            if (x < 0 || x >= g.GetLength(0)) return 'o';
+            if (y < 0 || y >= g.GetLength(1)) return 'o';
+
+            return g[x, y];
+        }
+        public static  char getAt(Position p )
+        {
+            if (p.x < 0 || p.x >= g.GetLength(0)) return 'o';
+            if (p.y < 0 || p.y >= g.GetLength(1)) return 'o';
+
+            return g[p.x, p.y];
+        }
+        public static void setAt(Position p , char marker = '.' )
+        {
+            if (p.x < 0 || p.x >= g.GetLength(0)) return ;
+            if (p.y < 0 || p.y >= g.GetLength(1)) return ;
+
+            g[p.x, p.y] = marker ;
+        }
+
+        public static bool isABox(Position p)
+        {
+            var x = p.x;
+            var y = p.y; 
+            if (x < 0 || x >= g.GetLength(0)) return false;
+            if (y < 0 || y >= g.GetLength(1)) return false ;
+
+
+            int i = 0;
+            var r = int.TryParse(g[x, y] + "", out i); 
+            return r ;
+        }
+
+
+        public static void ApplyExplosions(LinkedList<Impact> ims)
+        {
+            foreach (var im in ims)
+            {
+                foreach (var p in im.destroyed)
+                {
+                    setAt(p, 'd'); 
+                }
+            }
+        }
+
+        public static bool isFree(Position p)
+        {   
+            var val = getAt(p) ; 
+            return val == '.' || val == 't' || val == 'v' ; 
+        }
+
+        public static bool passExplosion(Position p)
+        {
+            var val = getAt(p);
+            return val == '.'  ;
+        }
+
+        public static void ApplyItems(LinkedList<Item> its)
+        {
+            foreach (var i in its)
+                setAt(i.p, 't'); 
+        }
+        public static bool isItem(Position p)
+        {
+            var val = getAt(p);
+            return  val == 't'; 
+        }
+
+        public static void SetVirtual(Position p)
+        {
+            setAt(p, 'v');  
+        }
+
+
+        public static void ApplyBomPositions(LinkedList<Bomb> bombs)
+        {
+            foreach (var b in bombs)
+            {
+                setAt(b.p, 'b'); 
+            }
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Impact
+    {
+        public Position p ;
+        public int hits;
+        public LinkedList<Position> destroyed = new LinkedList<Position>(); 
+        public Impact(Position p)
+        {
+            this.p = p;
+            this.hits = calcImpact(p,Me.BombRange, new HashSet<Position>());
+        }
+
+
+        public Impact(Position p, int hits )
+        {
+            this.p = p;
+            this.hits = hits ;
+        }
+
+        public int calcImpact (Position p  , int range , HashSet<Position> visited ){ 
+            int numBom = 0 ; 
+            foreach(var d in new String[]{"top","bot","right","left"} ){
+          
+                var nextP = p.go(d,1) ;
+                 
+                for (int i = 0; i < (range -1 )  ; i++)
+			    {
+                    if (visited.Contains(nextP)) continue;
+                    visited.Add(nextP);
+                    if (Grid.isABox(nextP))
+                    {
+                        destroyed.AddLast(nextP);
+                        numBom++;
+                        break;
+                    }
+                    foreach (var b in Grid.boms)
+                    {
+                        if (nextP.Equals(b.p) && b.duration > 3 )
+                        {   
+                            Console.Error.WriteLine("\n\n inception for "+this.p + "\ninception at " +b.p+" \n"); 
+                            numBom += calcImpact(b.p, b.range, visited); 
+                        }
+                    } 
+
+                    if (!Grid.passExplosion(nextP))
+                    {
+                        break;
+                    }
+                    
+                    nextP = nextP.go(d, 1); 
+			    }
+
+            } 
+            return numBom; 
+        }
+
+
+        public override bool Equals(object obj)
+        {
+
+            return false;
+        }
+
+
+        public bool Equals(Impact im)
+        {
+            return im.p.x == this.p.x && this.p.y == im.p.y;
+        }
+
+
+        public override int GetHashCode()
+        {
+            Console.Error.WriteLine("AM BEING COLLED FOR" + p);
+            return p.x + (p.y * 64);
+        }
+
+        public override string ToString()
+        {
+            return p + " hits "+ hits;
+        }
+
+    }
+
+
+
+}
+
+namespace codingame_hypersonic
+{
+    class ImpactComparer : IEqualityComparer<Impact>
+    {
+
+
+        public bool Equals(Impact x, Impact y)
+        {
+            return x.p.Equals(y.p); 
+        }
+
+        public int GetHashCode(Impact obj)
+        {
+            return obj.p.x + obj.p.y * 64; 
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Item
+    {
+        public Position p;
+        public int type;
+        public Item(Position p , int type )
+        {
+            this.p = p;
+            this.type = type; 
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Me : Player
+    {
+        public static int BombRange = 3; 
+        public static int numberOfBombs = 1  ; 
+        public Me()
+        {
+
+        }
+        public Me(int x , int y , int p1) : base(x,y,p1)
+        {
+
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Path
+    {
+        public int items =0 ;
+        public bool safeToBomb = true; 
+        public LinkedList<Impact> road;
+        public float score = 0; 
+        public int maxHits = 0 ; 
+        public int maxHitIndex = -1 ;
+
+        public Path()
+        {
+            this.road = new LinkedList<Impact>(); 
+        }
+
+        public Path(LinkedList<Impact> road )
+        {
+            this.road = road;      
+        }
+
+        public Path(LinkedList<Impact> road , int items)
+        {
+            this.items = items ;
+            this.road = road;
+        }
+
+        public Impact getLast()
+        {
+            return road.Last(); 
+        }
+
+
+        public Path AddPosition (Position p ){
+            
+            var im = new Impact(p) ;
+            LinkedList<Impact> li = new LinkedList<Impact>(road);
+            li.AddLast(im);
+
+            Path path = new Path(li);
+            path.score = score;
+            var howSafe = Safety.IsItSafeToStand(p);
+            if (Safety.isItSafeToBomb(p, p, Me.BombRange , 7 ))
+            {
+                
+
+                var bonusSpeed = ( howSafe > 4 )? true : false   ;
+                path.score += ((im.hits) * (3 + ((float)3 / (road.Count() + 1))));
+
+                if (im.hits > maxHits || im.hits == maxHits && bonusSpeed )
+                {
+                    path.maxHits = im.hits  ;
+                    path.maxHitIndex = road.Count();
+                }
+                else
+                {
+                    path.maxHits = maxHits;
+                    path.maxHitIndex = maxHitIndex;
+                }
+            }
+
+            if (Grid.isItem(p)) { path.score += ( (Me.numberOfBombs > 0 )? 3 : 9) ; } 
+           
+            
+            var danger = (howSafe > 3) ? 1 : 100; 
+            if (Safety.IsItSafeToStand(p) > 0)
+            {
+                path.score = (path.score - ((3 + ((float)road.Count() / (float)howSafe)) * danger));  
+            }
+            
+
+            if (road.Count() > 0)
+            {
+                if (road.Last().p.Equals(p))
+                {
+                    path.score = path.score - (1 + (float)2 / road.Count());
+                  
+                }
+                if(road.Count() > 1 ) {
+
+                    if (road.Last.Previous.Value.p.Equals(p))
+                        path.score = path.score - (1 + (float)2 / road.Count()); 
+                }
+            }
+            
+            path.safeToBomb = safeToBomb; 
+
+            return path; 
+        }
+       
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Player 
+    {
+        public Position p ;
+        public int numBomb ;
+        public Bomb bomb; 
+
+        public Player()
+        {          
+        }
+
+        public Player(int x, int y , int p1)
+        {
+            p = new Position(x, y);
+            numBomb = p1; 
+        }
+
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Position
+    {
+        public int x;
+        public int y;
+        public int data; 
+
+        public Position(int x, int y)
+        {
+            this.x = x;
+            this.y = y; 
+        }
+
+        public Position(int x, int y  ,int duration)
+        {
+            this.data = duration;
+            this.x = x;
+            this.y = y;
+        }
+
+        public Position go(string dir, int steps)
+        {
+            switch (dir)
+            {
+                case "top": return new Position(x, y + steps);
+                case "bot": return new Position(x, y - steps);
+                case "left": return new Position(x-steps, y );
+                case "right": return new Position(x + steps, y); 
+            }
+
+            return new Position(x, y); 
+        }
+
+        public override bool Equals(object obj)
+        {
+            
+            return false; 
+        }
+
+
+        public  bool Equals(Position p )
+        {     
+            return p.x == this.x && this.y == p.y; 
+        }
+
+
+        public override int GetHashCode()
+        {
+            return x + (y*64);
+        }
+
+        public override string ToString()
+        {
+            return x + " " + y; 
+        }
+
+
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class PositionComparer : IEqualityComparer<Position>
+    {
+        public bool Equals(Position x, Position y)
+        {
+            return x.Equals(y); 
+        }
+
+        public int GetHashCode(Position obj)
+        {
+            return obj.x + obj.y * 64; 
+        }
+    }
+}
+
+/**
+ * Auto-generated code below aims at helping you parse
+ * the standard input according to the problem statement.
+ **/
+namespace codingame_hypersonic
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            string[] inputs;
+            inputs = Console.ReadLine().Split(' ');
+            int width = int.Parse(inputs[0]);
+            int height = int.Parse(inputs[1]);
+            int myId = int.Parse(inputs[2]);
+            var target = new Position(6, 5); 
+            Grid.setGrid(height, width);
+
+            Me me = new Me() ;
+            Enemy enemy = new Enemy() ; 
+
+            // game loop
+            while (true)
+            {   
+                // calculate the Impact ! 
+                LinkedList<Impact> ims = new LinkedList<Impact>();
+                LinkedList<Item> its = new LinkedList<Item>();
+                LinkedList<Bomb> bombs = new LinkedList<Bomb>(); 
+                #region setup 
+                for (int i = 0; i < height; i++)
+                {
+                    string row = Console.ReadLine();
+                    for (int j = 0; j < row.Length; j++)
+                    {
+                        Grid.g[j, i] = row[j]; 
+                    }
+
+                }
+                int entities = int.Parse(Console.ReadLine());
+                for (int i = 0; i < entities; i++)
+                {
+                    inputs = Console.ReadLine().Split(' ');
+                    int entityType = int.Parse(inputs[0]);
+                    int owner = int.Parse(inputs[1]);
+                    int x = int.Parse(inputs[2]);
+                    int y = int.Parse(inputs[3]);
+                    int p1 = int.Parse(inputs[4]);
+                    int p2 = int.Parse(inputs[5]);
+
+                    if (entityType == 0)
+                    {
+                        //Player 
+                        if (owner == myId)
+                        {
+                            me = new Me(x,y,p1) ;
+                            Me.BombRange = p2;
+                            Me.numberOfBombs = p1; 
+                        }
+                        else
+                        {
+                            enemy = new Enemy(x, y, p1); 
+                        }
+                    }else if(entityType == 2){
+                        its.AddLast(new Item(new Position(x,y),p1)); 
+                    }
+                    else
+                    {
+                        ims.AddLast(new Impact(new Position(x,y)));
+                        bombs.AddFirst(new Bomb(x, y, p1, p2)); 
+                        //Bomb 
+                        if (owner == myId)
+                        {
+                            me.bomb = new Bomb(p1); 
+                        }
+                        else
+                        {   
+                            enemy.bomb = new Bomb(p1); 
+                        }
+
+                    }
+                }
+                #endregion 
+                // Set Gloabals  
+                Grid.boms = bombs;
+                do
+                {
+                    Safety.SetMapOfDestruction();
+                    Console.Error.WriteLine("Calibrating"); 
+                } while (!Safety.calibrateExplosionChaine());
+                
+
+                // apply memory to make the dude move  
+                   
+                 Grid.ApplyExplosions(ims);
+                 Grid.ApplyItems(its);
+                 Grid.ApplyBomPositions(bombs);
+
+                
+
+                 var path = Brain.navigateDirs(me);
+
+                 Console.Error.WriteLine("Score : "+path.score); 
+                 foreach(var im in path.road)
+                 Console.Error.WriteLine( im.p +" hits "+im.hits+" is it Safe " + Safety.IsItSafeToStand(im.p));
+
+          
+                 var action = Commander.DoAction(path , me); 
+                 Console.WriteLine(action);
+            }
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Safety
+    {
+        public static HashSet<Position> MapOfDestruction;
+        public static bool calibrateExplosionChaine()
+        {
+           
+            var done = true ; 
+            foreach(var b in Grid.boms )
+            { 
+                var i = IsItSafeToStand(b.p);
+                if (i > 0 && i < b.duration )
+                {
+                    b.duration = i;
+                    done = false; 
+                }
+               
+            }
+          
+            return done; 
+        }
+        public static void SetMapOfDestruction(){
+            MapOfDestruction = new HashSet<Position>(new PositionComparer() ); 
+            foreach (var b in Grid.boms)
+            {
+                if(b.duration > 1 )
+                foreach (var d in new String[] { "top", "bot", "right", "left" })
+                {
+                    var nextP = b.p.go(d, 1);
+                    for (int i = 0; i < (b.range-1); i++)
+                    {
+                         
+                        if (!Grid.passExplosion(nextP))
+                        {
+                            break;
+                        }
+                        nextP.data = b.duration;
+                        if (MapOfDestruction.Contains(nextP))
+                        {
+                            var k = MapOfDestruction.First(dp => dp.Equals(nextP)) ;
+                            if (k.data > nextP.data)
+                            {
+                                MapOfDestruction.Remove(k); 
+                                MapOfDestruction.Add(nextP); 
+                            }
+                        }
+                        else {
+                            MapOfDestruction.Add(nextP); 
+                        }
+
+                        nextP = nextP.go(d, 1);
+                    }
+
+                }
+
+
+            }
+          
+        }
+
+        public static bool amIGonnaHurt(Position p, int time)
+        {
+         
+            foreach (var b in Grid.boms)
+            {
+                if (b.duration - time == 1)
+                {
+                   
+                    foreach (var d in new String[] { "top", "bot", "right", "left" })
+                    {
+                        var nextP = b.p.go(d, 1);
+                        for (int i = 0; i < (b.range - 1); i++)
+                        {
+                            if (nextP.Equals(p))
+                            {
+                                return true;
+                            }
+                            else
+                            {
+                                if (!Grid.passExplosion(nextP))
+                                {
+                                    break;
+                                }
+                            }
+                            nextP = nextP.go(d, 1);
+                        }
+
+                    }
+                }
+
+            }
+            return false; 
+        }
+        public static int IsItSafeToStand(Position p)
+        {
+            if (MapOfDestruction.Contains(p))
+            {
+                return MapOfDestruction.First(dp => dp.Equals(p) ).data;
+            }
+            else
+            {
+                return -1; 
+            }
+            
+        }
+
+        public static bool isItSafeToBomb(Position bomb, Position me , int range , int steps)
+        {   
+            var explode  = IsItSafeToStand(bomb)  ;
+            if (explode > 0 &&  explode < 4 ) return false; 
+
+             
+                if (bomb.x != me.x && bomb.y != me.y  )
+                {
+                    return true; 
+                }
+
+                if (Math.Abs(bomb.x - me.x) >= range)
+                {
+                    return true; 
+                }
+            
+                if (Math.Abs(bomb.y - me.y) >= range)
+                {
+                    return true;
+                }
+           
+            if (steps == 0)
+            {
+                return false; 
+            }
+            steps -- ; 
+
+            foreach (var d in new String[] { "top", "bot", "right", "left" })
+            {
+                var nextP = me.go(d, 1);
+                if (Grid.isFree(nextP) && !nextP.Equals(bomb) )
+                {
+                    if (isItSafeToBomb(bomb, nextP, range, steps))
+                    {
+                        return true; 
+                    } 
+                }
+
+            }
+
+            return false; 
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Sight
+    {
+        public LinkedList<Position> Arround( Position p, int diametre)
+        {
+            var result = new LinkedList<Position>();
+
+            for (int i = (p.x - diametre); i <= (diametre + p.x); i++)
+            {
+                var pTop = new Position(i, p.y + diametre);
+                var pBot = new Position(i, p.y - diametre);
+                if (Grid.getAt(pTop) == '.')
+                {
+                    result.AddLast(pTop);
+                }
+                if (Grid.getAt(pBot) == '.')
+                {
+                    result.AddLast(pBot);
+                }
+            }
+
+            for (int i = (p.y - diametre) + 1; i < (diametre + p.y); i++)
+            {
+                var pTop = new Position(p.x + diametre, i);
+                var pBot = new Position(p.x - diametre, i);
+                if (Grid.getAt(pTop) == '.')
+                {
+                    result.AddLast(pTop);
+                }
+                if (Grid.getAt(pBot) == '.')
+                {
+                    result.AddLast(pBot);
+                }
+            }
+
+            return result;
+
+        }
+    }
+}
+
+namespace codingame_hypersonic
+{
+    class Walker
+    {
+        public Path walk(Path result , int steps , int counter = 0 )
+        {
+            if (steps == 0)
+            {
+                return result;
+            }
+            var curPosition = result.getLast(); 
+            counter++;
+            steps--;
+            var score = float.MinValue;
+            Path p = result;
+            float variation = 0; 
+            bool change = false; 
+            var safeToBomb = false ; 
+            foreach (var d in new string[] { "top", "bot", "right", "left", "none" })
+            {
+                var nextP = curPosition.p.go(d, 1);
+                var gonnaHurt = Safety.amIGonnaHurt(nextP, counter);
+
+                if (Grid.isFree(nextP) || nextP.Equals(curPosition.p) )
+                {
+                    safeToBomb = true;
+                    variation+= 0.1f ;  // more choices  
+                    var path = walk(result.AddPosition(nextP), steps, counter);
+                    if (path.score > score )
+                    {   
+                        change = true; 
+                        score = path.score;
+                        p = path; 
+                    }
+                }
+
+
+            }
+            p.score += variation; 
+            p.safeToBomb = (p.safeToBomb == false)? false : safeToBomb; 
+            return p; 
+        }
+
+    }
+}
